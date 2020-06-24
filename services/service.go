@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/mauriliommachado/go-commerce/product-service/data"
 	"github.com/mauriliommachado/go-commerce/product-service/models"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var pr data.ProductRepository
@@ -21,8 +23,8 @@ func InitServer(app *models.App) error {
 	router.GET("/ping", ping)
 	router.GET("/product/:id", get)
 	router.GET("/product", getAll)
-	router.PUT("/product/:id", update)
-	router.POST("/product", add)
+	router.PUT("/product/:id", protectMiddleware(update))
+	router.POST("/product", protectMiddleware(add))
 	log.Fatal(http.ListenAndServe(":8081", router))
 	app.Router = router
 	return nil
@@ -32,19 +34,33 @@ func ping(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	fmt.Fprint(w, "pong\n")
 }
 
-func get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	fmt.Fprint(w, "You have the key!\n")
+func get(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	p, err := pr.Get(ps.ByName("id"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	response, _ := json.Marshal(p)
+	w.Write(response)
 }
 
 func getAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	fmt.Fprint(w, "You have the key!\n")
+	log.Println(pr.GetAll())
+	response, _ := json.Marshal(pr.GetAll())
+	w.Write(response)
 }
 
-func update(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	fmt.Fprint(w, "You have the key!\n")
+func update(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var product models.Product
+	json.NewDecoder(r.Body).Decode(&product)
+	product.ID, _ = primitive.ObjectIDFromHex(ps.ByName("id"))
+	pr.Update(&product)
 }
 
 func add(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	pr.Create(&models.Product{})
-	fmt.Fprint(w, "You have the key!\n")
+	var product models.Product
+	json.NewDecoder(r.Body).Decode(&product)
+	pr.Create(&product)
+	w.Header().Add("Location", product.ID.Hex())
+	w.WriteHeader(http.StatusCreated)
 }

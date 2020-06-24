@@ -2,9 +2,11 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/julienschmidt/httprouter"
 	"github.com/mauriliommachado/go-commerce/product-service/models"
 )
@@ -16,25 +18,37 @@ func InitMiddleware(config *models.App) {
 	app = config
 }
 
-func protectMiddleware(next http.HandlerFunc) httprouter.Handle {
+func protectMiddleware(next httprouter.Handle) httprouter.Handle {
 	return httprouter.Handle(func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		authorizationHeader := strings.Split(req.Header.Get("Authorization"), " ")[1]
+		authorizationHeader := req.Header.Get("Authorization")
 		if authorizationHeader != "" {
-			if validateToken(authorizationHeader) {
-				next(w, req)
+			bearerToken := strings.Split(authorizationHeader, " ")
+			if len(bearerToken) == 2 {
+				token, err := parseBearerToken(bearerToken[1])
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(models.Exception{Message: err.Error()})
+					return
+				}
+				if token.Valid {
+					next(w, req, ps)
+					return
+				}
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(models.Exception{Message: "Invalid Authorization token"})
 				return
 			}
 		}
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(models.Exception{Message: "Invalid Authorization token"})
-		return
+		json.NewEncoder(w).Encode(models.Exception{Message: "An Authorization header is required"})
 	})
 }
 
-func validateToken(token string) bool {
-	resp, err := http.Get(app.AuthService + "/" + token)
-	if err != nil {
-		print(err)
-	}
-	return resp.StatusCode == 200
+func parseBearerToken(bearerToken string) (*jwt.Token, error) {
+	return jwt.Parse(bearerToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("There was an error")
+		}
+		return []byte("superSecretKey"), nil
+	})
 }

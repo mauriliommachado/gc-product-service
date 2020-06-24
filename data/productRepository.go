@@ -6,6 +6,7 @@ import (
 
 	"github.com/globalsign/mgo/bson"
 	"github.com/mauriliommachado/go-commerce/product-service/models"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -21,35 +22,47 @@ func (r *ProductRepository) Create(product *models.Product) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Inserted a single document: ", insertResult.InsertedID)
+	product.ID = insertResult.InsertedID.(primitive.ObjectID)
+	log.Println("Inserted a single document: ", insertResult.InsertedID.(primitive.ObjectID).Hex())
+	return err
+}
+
+//Update product
+func (r *ProductRepository) Update(product *models.Product) error {
+	filter := bson.M{"_id": product.ID}
+	update := bson.M{"$set": bson.M{"price": product.Price,
+		"name": product.Name}}
+	_, err := r.C.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Update a single document ")
 	return err
 }
 
 //Get product
-func (r *ProductRepository) Get(product *models.Product) error {
+func (r *ProductRepository) Get(id string) (models.Product, error) {
 	// create a value into which the result can be decoded
+	objectID, _ := primitive.ObjectIDFromHex(id)
+	filter := bson.M{"_id": objectID}
 	var result models.Product
-	filter := bson.D{{"name", "Ash"}}
-
 	err := r.C.FindOne(context.TODO(), filter).Decode(&result)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
-	return err
+	return result, err
 }
 
 //GetAll products
 func (r *ProductRepository) GetAll() []models.Product {
-	var products []models.Product
 	// Pass these options to the Find method
 	findOptions := options.Find()
-	findOptions.SetLimit(2)
 
 	// Here's an array in which you can store the decoded documents
-	var results []*models.Product
+	var results []models.Product
 
 	// Passing bson.D{{}} as the filter matches all documents in the collection
-	cur, err := r.C.Find(context.TODO(), bson.D{{}}, findOptions)
+	cur, err := r.C.Find(context.TODO(), bson.M{}, findOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -57,7 +70,6 @@ func (r *ProductRepository) GetAll() []models.Product {
 	// Finding multiple documents returns a cursor
 	// Iterating through the cursor allows us to decode documents one at a time
 	for cur.Next(context.TODO()) {
-
 		// create a value into which the single document can be decoded
 		var elem models.Product
 		err := cur.Decode(&elem)
@@ -65,7 +77,7 @@ func (r *ProductRepository) GetAll() []models.Product {
 			log.Fatal(err)
 		}
 
-		results = append(results, &elem)
+		results = append(results, elem)
 	}
 	if err := cur.Err(); err != nil {
 		log.Fatal(err)
@@ -73,7 +85,7 @@ func (r *ProductRepository) GetAll() []models.Product {
 
 	// Close the cursor once finished
 	cur.Close(context.TODO())
-	return products
+	return results
 }
 
 //Delete Product
