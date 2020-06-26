@@ -25,6 +25,7 @@ func InitServer(app *models.App) error {
 	router.GET("/product", getAll)
 	router.PUT("/product/:id", protectMiddleware(update))
 	router.POST("/product", protectMiddleware(add))
+	router.DELETE("/product/:id", protectMiddleware(delete))
 	log.Fatal(http.ListenAndServe(":8081", router))
 	app.Router = router
 	return nil
@@ -44,8 +45,15 @@ func get(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.Write(response)
 }
 
+func delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	err := pr.Delete(ps.ByName("id"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+}
+
 func getAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	log.Println(pr.GetAll())
 	response, _ := json.Marshal(pr.GetAll())
 	w.Write(response)
 }

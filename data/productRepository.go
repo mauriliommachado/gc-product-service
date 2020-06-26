@@ -23,7 +23,6 @@ func (r *ProductRepository) Create(product *models.Product) error {
 		log.Fatal(err)
 	}
 	product.ID = insertResult.InsertedID.(primitive.ObjectID)
-	log.Println("Inserted a single document: ", insertResult.InsertedID.(primitive.ObjectID).Hex())
 	return err
 }
 
@@ -90,7 +89,9 @@ func (r *ProductRepository) GetAll() []models.Product {
 
 //Delete Product
 func (r *ProductRepository) Delete(id string) error {
-	_, err := r.C.DeleteMany(context.TODO(), bson.D{{}})
+	objectID, _ := primitive.ObjectIDFromHex(id)
+	filter := bson.M{"_id": objectID}
+	_, err := r.C.DeleteOne(context.TODO(), filter)
 	if err != nil {
 		log.Fatal(err)
 	}
